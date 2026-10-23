@@ -1,0 +1,14 @@
+# RustWidget 配置（由设置界面写入）
+# 素材根目录为 exe 同级的 skin/<皮肤名>/，切换皮肤只改 skin 一项
+
+mode = "pendant"
+skin = "大肥鱼冬装"
+display_size = 45
+frame_ms = 60
+rope_length = 100
+gravity = 4800
+damping = 20
+max_angle_deg = 80
+cursor_clearance = 18
+dock_x = 18
+dock_y = 18
