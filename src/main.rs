@@ -2,7 +2,6 @@
 
 mod config;
 mod cursor;
-mod diag;
 mod icon;
 mod physics;
 mod render;
@@ -48,9 +47,7 @@ static RUN_START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
 /// 会话锁屏/解锁消息（wtsapi32.h）
 const WM_WTSSESSION_CHANGE: u32 = 0x02B1;
-/// 0x7 = 锁屏
-const WTS_SESSION_LOCK: usize = 0x7;
-/// 0x8 = 解锁
+/// 0x8 = 解锁（0x7 是锁屏，这里只需要解锁）
 const WTS_SESSION_UNLOCK: usize = 0x8;
 /// 绳子分几段。段数越多越柔软，12 段在视觉和开销之间比较平衡。
 const ROPE_SEGMENTS: usize = 12;
@@ -123,24 +120,14 @@ impl SkinRuntime {
 
 fn run() -> Result<()> {
     let exe_dir = exe_dir();
-    diag::init(&exe_dir);
     let mut cfg = Config::load(&exe_dir.join("widget.toml"));
 
     // 先把 Normal 同步加载好，拿到真实纹理尺寸后才能算窗口大小
     let mut normal = load_normal(&cfg, &exe_dir);
     let (mut sprite_w, mut sprite_h) = (normal.width, normal.height);
     let (mut win_w, mut win_h) = cfg.window_size_for(sprite_w, sprite_h);
-    dlog!(
-        "配置：模式={:?} 皮肤={} 精灵 {}×{} 窗口 {}×{}",
-        cfg.mode, cfg.skin, sprite_w, sprite_h, win_w, win_h
-    );
 
     let mut skin = SkinRuntime::load(&cfg, &exe_dir);
-    dlog!(
-        "皮肤就绪：{} 个目录，{} 个回落",
-        skin.resolved.len(),
-        skin.alias.len()
-    );
 
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -156,13 +143,7 @@ fn run() -> Result<()> {
         let _ = RUN_START.set(Instant::now());
 
         let tray_ok = tray::add(hwnd).is_ok();
-        if !tray_ok {
-            dlog!("托盘图标创建失败");
-        }
-        if RegisterHotKey(Some(hwnd), HOTKEY_ID, MOD_CONTROL | MOD_ALT, 'Q' as u32).is_err() {
-            dlog!("退出热键注册失败（可能被占用）");
-        }
-        dlog!("已启动");
+        let _ = RegisterHotKey(Some(hwnd), HOTKEY_ID, MOD_CONTROL | MOD_ALT, 'Q' as u32);
 
         settings::sync(&cfg, &exe_dir);
 
@@ -182,7 +163,6 @@ fn run() -> Result<()> {
         let mut frame_idx: usize = 0;
         let mut frame_acc: f32 = 0.0;
         let mut last = Instant::now();
-        let mut last_beat = Instant::now();
         let mut last_retry = Instant::now();
         let mut last_cursor = POINT::default();
         // 上次真正下发的窗口位置。位置没变就不再调 SetWindowPos，
@@ -200,19 +180,11 @@ fn run() -> Result<()> {
             }
 
             // 遮挡恢复（显示器休眠唤醒、锁屏解锁、全屏切换）/ 上次绘制失败 → 重建合成链路
-            if renderer.take_unoccluded() {
-                // 遮挡信号太敏感（任何窗口盖住都会触发），不足以驱动重建，仅记录
-                dlog!("遮挡结束（仅记录）");
-            }
-
             // 会话解锁 → 重启进程恢复画面
             if UNLOCKED.swap(false, Ordering::SeqCst) {
                 let alive = RUN_START.get().map_or(0, |t| t.elapsed().as_secs());
                 if alive >= 3 {
-                    dlog!("会话状态变化 → 重启进程（已运行 {alive}s）");
                     relaunch_and_exit();
-                } else {
-                    dlog!("解锁但进程刚启动（{alive}s），跳过重启");
                 }
             }
             // 重建失败后隔 2 秒再重试，避免每帧刷日志
@@ -220,14 +192,8 @@ fn run() -> Result<()> {
                 REATTACH.store(false, Ordering::SeqCst);
                 last_retry = Instant::now();
                 match rebuild_window(&mut hwnd, &mut renderer, win_w, win_h, tray_ok) {
-                    Ok(()) => {
-                        dlog!("重建完成（窗口已重建）");
-                        last_win_pos = (i32::MIN, i32::MIN);
-                    }
-                    Err(e) => {
-                        dlog!("重建失败，2 秒后重试：{e:?}");
-                        REATTACH.store(true, Ordering::SeqCst);
-                    }
+                    Ok(()) => last_win_pos = (i32::MIN, i32::MIN),
+                    Err(_) => REATTACH.store(true, Ordering::SeqCst),
                 }
             }
 
@@ -279,11 +245,7 @@ fn run() -> Result<()> {
                         rope.set_total_len(rope_total(&cfg, sprite_h));
 
                         settings::sync(&cfg, &exe_dir);
-                        if let Err(e) = cfg.save(&exe_dir.join("widget.toml")) {
-                            dlog!("配置保存失败：{e}");
-                        } else {
-                            dlog!("配置已应用并保存");
-                        }
+                        let _ = cfg.save(&exe_dir.join("widget.toml"));
                     }
                 }
             }
@@ -302,21 +264,8 @@ fn run() -> Result<()> {
             // 时间跳变说明进程被挂起过（系统休眠，或 Present 长时间阻塞）。
             // 这种情况下合成链路一定失效，而且期间没有 Present 返回值可看，遮挡检测抓不到。
             if dt > 1.5 {
-                dlog!("时间跳变 {dt:.1}s（休眠或长时间阻塞）→ 重建");
                 tracker.reset([pt.x as f32, pt.y as f32]);
                 REATTACH.store(true, Ordering::SeqCst);
-            }
-
-            // 心跳：每 60 秒记一次状态，用来判断锁屏期间程序是否还在跑
-            if last_beat.elapsed().as_secs() >= 60 {
-                last_beat = Instant::now();
-                dlog!(
-                    "心跳：遮挡={} 光标=({},{}) 模式={:?}",
-                    renderer.is_occluded(),
-                    pt.x,
-                    pt.y,
-                    cfg.mode
-                );
             }
 
             let accel = tracker.update([pt.x as f32, pt.y as f32], dt);
@@ -403,9 +352,8 @@ fn run() -> Result<()> {
                 renderer.end_frame()?;
                 Ok(())
                 })();
-                if let Err(e) = drawn {
+                if drawn.is_err() {
                     // 单帧失败不该结束进程：多半是设备/合成链路失效，重建一次
-                    dlog!("绘制失败（设备丢失={}）：{e:?}", renderer.device_lost());
                     REATTACH.store(true, Ordering::SeqCst);
                     Sleep(16);
                 }
@@ -428,16 +376,8 @@ fn run() -> Result<()> {
 /// 加载「正常选择」这一套。任何环节失败都退化成全黑方块，保证挂件不会因为素材问题消失。
 fn load_normal(cfg: &Config, exe_dir: &Path) -> FrameSet {
     let dir = cfg.skin_dir(exe_dir).join(CursorState::Normal.dir());
-    match sprite::load_dir(&dir, cfg.display_size) {
-        Ok(fs) => fs,
-        Err(e) => {
-            println!(
-                "[warn] 皮肤「{}」没有可用图片（{e}），改用 {}×{} 黑色方块占位",
-                cfg.skin, cfg.display_size, cfg.display_size
-            );
-            sprite::placeholder(cfg.display_size)
-        }
-    }
+    sprite::load_dir(&dir, cfg.display_size)
+        .unwrap_or_else(|_| sprite::placeholder(cfg.display_size))
 }
 
 /// 绳链总长：配置的绳长 + 四分之一个精灵高度（让末端伸进画布）。
@@ -512,15 +452,9 @@ fn relaunch_and_exit() {
     if let Ok(exe) = std::env::current_exe() {
         let mut cmd = std::process::Command::new(&exe);
         cmd.creation_flags(CREATE_BREAKAWAY_FROM_JOB);
-        match cmd.spawn() {
-            Ok(_) => dlog!("已启动新实例（脱离 Job）"),
-            Err(e) => {
-                dlog!("脱离 Job 启动失败（{e}），改用普通方式");
-                match std::process::Command::new(&exe).spawn() {
-                    Ok(_) => dlog!("已启动新实例"),
-                    Err(e2) => dlog!("启动新实例失败：{e2}"),
-                }
-            }
+        if cmd.spawn().is_err() {
+            // 脱离 Job 被拒绝时退回普通方式
+            let _ = std::process::Command::new(&exe).spawn();
         }
     }
     QUIT.store(true, Ordering::SeqCst);
@@ -589,14 +523,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         // 系统推送的会话状态变化
         WM_WTSSESSION_CHANGE => {
-            let ev = wparam.0;
-            match ev {
-                WTS_SESSION_LOCK => dlog!("会话事件：锁屏"),
-                WTS_SESSION_UNLOCK => {
-                    dlog!("会话事件：解锁 → 重启进程");
-                    UNLOCKED.store(true, Ordering::SeqCst);
-                }
-                other => dlog!("会话事件 wParam={other}（其他）"),
+            if wparam.0 == WTS_SESSION_UNLOCK {
+                UNLOCKED.store(true, Ordering::SeqCst);
             }
             LRESULT(0)
         }
