@@ -88,14 +88,10 @@ pub fn spawn_loader(
     std::thread::spawn(move || {
         for key in dirs {
             let path = root.join(key);
-            match load_dir(&path, display_size) {
-                Ok(fs) => {
-                    crate::diag::log(&format!("载入 {key}：{} 帧 {}×{}", fs.len(), fs.width, fs.height));
-                    if tx.send((key, Arc::new(fs))).is_err() {
-                        return;
-                    }
+            if let Ok(fs) = load_dir(&path, display_size) {
+                if tx.send((key, Arc::new(fs))).is_err() {
+                    return;
                 }
-                Err(e) => crate::diag::log(&format!("{} 载入失败：{e}", path.display())),
             }
         }
     });
