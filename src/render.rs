@@ -71,10 +71,6 @@ pub struct Renderer {
     pub width: u32,
     pub height: u32,
     cur_offset: (i32, i32),
-    /// 上一帧是否处于遮挡状态（显示器休眠、锁屏、全屏应用）
-    was_occluded: bool,
-    /// 刚从遮挡恢复 —— 合成链路大概率已经失效，需要重建
-    just_unoccluded: bool,
 }
 
 impl Renderer {
@@ -264,8 +260,6 @@ impl Renderer {
                 width,
                 height,
                 cur_offset: (i32::MIN, i32::MIN),
-                was_occluded: false,
-                just_unoccluded: false,
             })
         }
     }
@@ -560,27 +554,9 @@ impl Renderer {
             return Ok(());
         };
         unsafe {
-            let hr = sc.Present(1, DXGI_PRESENT(0));
-            // DXGI_STATUS_OCCLUDED = 0x087A0001，是成功码不是错误
-            let occluded = hr.0 == 0x087A0001;
-            if self.was_occluded && !occluded {
-                // 遮挡结束的那一帧：DWM 通常已经把视觉树丢了
-                self.just_unoccluded = true;
-            }
-            self.was_occluded = occluded;
-            hr.ok()?;
+            sc.Present(1, DXGI_PRESENT(0)).ok()?;
         }
         Ok(())
-    }
-
-    /// 当前是否处于遮挡状态
-    pub fn is_occluded(&self) -> bool {
-        self.was_occluded
-    }
-
-    /// 取走「刚从遮挡恢复」事件
-    pub fn take_unoccluded(&mut self) -> bool {
-        std::mem::take(&mut self.just_unoccluded)
     }
 
     /// 重建 DirectComposition 链路（交换链 + 设备 + 目标 + 视觉树）。
@@ -634,11 +610,6 @@ impl Renderer {
         // 强制下一次 set_offset 重新提交
         self.cur_offset = (i32::MIN, i32::MIN);
         Ok(())
-    }
-
-    /// 设备是否已经丢失（被驱动重置/移除）
-    pub fn device_lost(&self) -> bool {
-        unsafe { self.device.GetDeviceRemovedReason().is_err() }
     }
 
 }
