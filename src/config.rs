@@ -58,7 +58,6 @@ impl Config {
     pub fn load(path: &Path) -> Self {
         let mut cfg = Config::default();
         let Ok(text) = std::fs::read_to_string(path) else {
-            println!("[cfg] 未找到 {}，使用默认配置", path.display());
             return cfg;
         };
 
@@ -97,10 +96,6 @@ impl Config {
             let t = num("texture_size", 128.0);
             let s = num("sprite_scale", 0.9);
             cfg.display_size = (t * s).round().max(16.0) as u32;
-            println!(
-                "[cfg] 旧配置迁移：texture_size {t} × sprite_scale {s} → display_size {}",
-                cfg.display_size
-            );
         }
 
         cfg.frame_ms = num("frame_ms", cfg.frame_ms as f64) as u32;
