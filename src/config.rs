@@ -19,6 +19,8 @@ pub struct Config {
     pub display_size: u32,
     pub frame_ms: u32,
     pub rope_length: f32,
+    /// 绳子分几段。越多越柔软，物理开销按段数线性增长。
+    pub rope_segments: u32,
     pub gravity: f32,
     pub damping: f32,
     pub max_angle_deg: f32,
@@ -42,6 +44,7 @@ impl Default for Config {
             display_size: 96,
             frame_ms: 100,
             rope_length: 60.0,
+            rope_segments: 12,
             gravity: 2400.0,
             damping: 2.2,
             max_angle_deg: 35.0,
@@ -100,6 +103,7 @@ impl Config {
 
         cfg.frame_ms = num("frame_ms", cfg.frame_ms as f64) as u32;
         cfg.rope_length = num("rope_length", cfg.rope_length as f64) as f32;
+        cfg.rope_segments = (num("rope_segments", cfg.rope_segments as f64) as u32).clamp(2, 30);
         cfg.gravity = num("gravity", cfg.gravity as f64) as f32;
         cfg.damping = num("damping", cfg.damping as f64) as f32;
         cfg.max_angle_deg = num("max_angle_deg", cfg.max_angle_deg as f64) as f32;
@@ -127,6 +131,7 @@ impl Config {
              display_size = {}\n\
              frame_ms = {}\n\
              rope_length = {}\n\
+             rope_segments = {}\n\
              gravity = {}\n\
              damping = {}\n\
              max_angle_deg = {}\n\
@@ -143,6 +148,7 @@ impl Config {
             self.display_size,
             self.frame_ms,
             self.rope_length,
+            self.rope_segments,
             self.gravity,
             self.damping,
             self.max_angle_deg,
