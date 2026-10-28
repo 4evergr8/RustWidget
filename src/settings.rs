@@ -64,6 +64,7 @@ const ID_SKIN: i32 = 1001;
 const ID_DISPLAY: i32 = 1010;
 const ID_FRAME: i32 = 1011;
 const ID_ROPE: i32 = 1012;
+const ID_SEGMENTS: i32 = 1041;
 const ID_GRAVITY: i32 = 1013;
 const ID_DAMPING: i32 = 1014;
 const ID_ANGLE: i32 = 1015;
@@ -249,6 +250,8 @@ unsafe fn create_children(hwnd: HWND) -> i32 {
     y = section(hwnd, y, sec_idx, "挂件模式", hinstance, f_body);
     sec_idx += 1;
     numeric_row(hwnd, y, "绳子长度 (px)", ID_ROPE, hinstance, f_body);
+    y += ROW_H;
+    numeric_row(hwnd, y, "绳子段数", ID_SEGMENTS, hinstance, f_body);
     y += ROW_H;
     numeric_row(hwnd, y, "重力 (px/s²)", ID_GRAVITY, hinstance, f_body);
     y += ROW_H;
@@ -491,6 +494,7 @@ fn populate(hwnd: HWND) {
         sync_updown(hwnd, ID_DISPLAY, cfg.display_size as i32);
         sync_updown(hwnd, ID_FRAME, cfg.frame_ms as i32);
         sync_updown(hwnd, ID_ROPE, cfg.rope_length.round() as i32);
+        sync_updown(hwnd, ID_SEGMENTS, cfg.rope_segments as i32);
         sync_updown(hwnd, ID_GRAVITY, cfg.gravity.round() as i32);
         sync_updown(hwnd, ID_DAMPING, cfg.damping.round() as i32);
         sync_updown(hwnd, ID_ANGLE, cfg.max_angle_deg.round() as i32);
@@ -503,6 +507,7 @@ fn populate(hwnd: HWND) {
         set_text(ctrl(hwnd, ID_DISPLAY), &cfg.display_size.to_string());
         set_text(ctrl(hwnd, ID_FRAME), &cfg.frame_ms.to_string());
         set_text(ctrl(hwnd, ID_ROPE), &fmt(cfg.rope_length));
+        set_text(ctrl(hwnd, ID_SEGMENTS), &cfg.rope_segments.to_string());
         set_text(ctrl(hwnd, ID_GRAVITY), &fmt(cfg.gravity));
         set_text(ctrl(hwnd, ID_DAMPING), &fmt(cfg.damping));
         set_text(ctrl(hwnd, ID_ANGLE), &fmt(cfg.max_angle_deg));
@@ -572,6 +577,7 @@ fn read_config(hwnd: HWND) -> Config {
         cfg.display_size = u(ID_DISPLAY, cfg.display_size).clamp(16, 512);
         cfg.frame_ms = u(ID_FRAME, cfg.frame_ms).clamp(10, 1000);
         cfg.rope_length = f(ID_ROPE, cfg.rope_length).clamp(0.0, 400.0);
+        cfg.rope_segments = u(ID_SEGMENTS, cfg.rope_segments).clamp(2, 30);
         cfg.gravity = f(ID_GRAVITY, cfg.gravity).clamp(100.0, 20000.0);
         cfg.damping = f(ID_DAMPING, cfg.damping).clamp(0.0, 30.0);
         cfg.max_angle_deg = f(ID_ANGLE, cfg.max_angle_deg).clamp(1.0, 80.0);
@@ -590,6 +596,7 @@ fn range_of(field: i32) -> (i32, i32) {
         ID_DISPLAY => (16, 512),
         ID_FRAME => (10, 1000),
         ID_ROPE => (0, 400),
+        ID_SEGMENTS => (2, 30),
         ID_GRAVITY => (100, 20000),
         ID_DAMPING => (0, 30),
         ID_ANGLE => (1, 80),
