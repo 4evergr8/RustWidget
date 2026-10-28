@@ -45,6 +45,7 @@ fn main() {
 /// 不读注册表（reg.exe 可能被安全策略拦），直接扫常见安装路径。
 fn find_rc() -> Option<PathBuf> {
     let roots: Vec<PathBuf> = vec![
+        PathBuf::from(r"D://project//SDK//Windows Kits//10"),
         PathBuf::from(r"D://Windows Kits//10"),
         PathBuf::from(r"C://Program Files (x86)//Windows Kits//10"),
         PathBuf::from(r"C://Program Files//Windows Kits//10"),
