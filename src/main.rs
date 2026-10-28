@@ -49,8 +49,6 @@ static RUN_START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 const WM_WTSSESSION_CHANGE: u32 = 0x02B1;
 /// 0x8 = 解锁（0x7 是锁屏，这里只需要解锁）
 const WTS_SESSION_UNLOCK: usize = 0x8;
-/// 绳子分几段。段数越多越柔软，12 段在视觉和开销之间比较平衡。
-const ROPE_SEGMENTS: usize = 12;
 
 static QUIT: AtomicBool = AtomicBool::new(false);
 
@@ -149,7 +147,11 @@ fn run() -> Result<()> {
 
         let mut watcher = CursorWatcher::new();
         let mut tracker = PivotTracker::new();
-        let mut rope = Rope::new(ROPE_SEGMENTS, rope_total(&cfg, sprite_h), [0.0, 0.0]);
+        let mut rope = Rope::new(
+            cfg.rope_segments as usize,
+            rope_total(&cfg, sprite_h),
+            [0.0, 0.0],
+        );
         rope.gravity = cfg.gravity;
         rope.damping = cfg.damping * 0.5;
         rope.max_theta = cfg.max_angle_deg.to_radians();
@@ -239,10 +241,19 @@ fn run() -> Result<()> {
 
                         frame_dur = cfg.frame_ms as f32 / 1000.0;
                         fixed_dt = 1.0 / cfg.physics_hz as f32;
+                        // 段数变了必须重建绳链：段长随段数变化，不能只改字段
+                        if rope.segments() != cfg.rope_segments as usize {
+                            rope = Rope::new(
+                                cfg.rope_segments as usize,
+                                rope_total(&cfg, sprite_h),
+                                [half_w, 0.0],
+                            );
+                        } else {
+                            rope.set_total_len(rope_total(&cfg, sprite_h));
+                        }
                         rope.gravity = cfg.gravity;
                         rope.damping = cfg.damping * 0.5;
                         rope.max_theta = cfg.max_angle_deg.to_radians();
-                        rope.set_total_len(rope_total(&cfg, sprite_h));
 
                         settings::sync(&cfg, &exe_dir);
                         let _ = cfg.save(&exe_dir.join("widget.toml"));
